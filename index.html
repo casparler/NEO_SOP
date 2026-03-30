@@ -113,32 +113,46 @@ WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Be
         const therapyNote = `<div class="alert alert-info" style="margin-bottom:10px;"><b>Therapiedauer:</b> ${therapyDays} Tage (Nur bei CRP&lt;10 mg/l und stabilem Zustand beenden).</div>`;
         html += therapyNote;
 
-        // Standard-Medikamente: Ampicillin bleibt immer sichtbar.
-        // Exklusiver Medikamenten-Swap: bei gezielter Therapie oder Verdacht KNS/Katheter wird Tobramycin durch Vancomycin ersetzt.
-        const ampi = SOP_LOGIC.getAmpiCefo(pma, pna, weight, state.meningitis);
-        html += renderMedCard('Ampicillin', ampi.dose, ampi.interval, 'mg');
-        html += renderMedCard('Cefotaxim', ampi.dose, ampi.interval, 'mg');
         const swapToVanco = state.targeted || state.vanco;
-        if (swapToVanco) {
-            const vanco = SOP_LOGIC.getVancomycin(pma, pna, weight, state.meningitis);
-            html += renderMedCard('Vancomycin', vanco.dose, vanco.interval, 'mg', `Talspiegel-Ziel: ${state.meningitis ? '15-20' : '5-10'} mg/l`);
-        } else {
-            const tobra = SOP_LOGIC.getTobramycin(pma, pna, weight);
-            html += renderMedCard('Tobramycin', tobra.dose, tobra.interval, 'mg', 'Talspiegel-Ziel: < 2 mg/l (vor 3. Gabe)');
+
+        // Blutkultur-Steril-Logik (Global): Hinweis immer anzeigen, wenn Chip aktiv.
+        if (state.steril) {
+            html += `<div class="alert alert-success">Blutkultur steril: Cefotaxim & Caspofungin beenden</div>`;
         }
 
-        // Optional: Caspofungin/Stop-Hinweis (Standard-Medikamente bleiben sichtbar)
-        if (state.eos && ssw_dec < 28.0) {
+        // Ampicillin bleibt Basis in beiden SOP-Fällen
+        const ampi = SOP_LOGIC.getAmpiCefo(pma, pna, weight, state.meningitis);
+        html += renderMedCard('Ampicillin', ampi.dose, ampi.interval, 'mg');
+
+        // FALL A: Primärtherapie/EOS (keine gezielte Therapie/KNS-Verdacht)
+        // - Cefotaxim außer steril
+        // - Tobramycin außer Swap zu Vanco
+        if (!swapToVanco) {
             if (!state.steril) {
-                html += renderMedCard('Caspofungin', (weight * 25).toFixed(1), 24, 'mg', 'Loading Dose 25mg/kg, dann 25mg/kg 1x tgl.');
-            } else {
-                html += `<div class="alert alert-success"><b>Blutkultur steril:</b> erwägen, weitere Therapie zu beenden.</div>`;
+                html += renderMedCard('Cefotaxim', ampi.dose, ampi.interval, 'mg');
             }
+            const tobra = SOP_LOGIC.getTobramycin(pma, pna, weight);
+            html += renderMedCard('Tobramycin', tobra.dose, tobra.interval, 'mg', 'Talspiegel-Ziel: < 2 mg/l (vor 3. Gabe)');
+        } else {
+            // FALL B: Gezielte Therapie / KNS-Verdacht
+            // - Ampicillin + Vancomycin
+            // - Cefotaxim & Tobramycin ausgeblendet, außer bei V.a. Meningitis (Cefotaxim bleibt sichtbar)
+            const vanco = SOP_LOGIC.getVancomycin(pma, pna, weight, state.meningitis);
+            html += renderMedCard('Vancomycin', vanco.dose, vanco.interval, 'mg', `Talspiegel-Ziel: ${state.meningitis ? '15-20' : '5-10'} mg/l`);
+
+            if (state.meningitis) {
+                html += renderMedCard('Cefotaxim', ampi.dose, ampi.interval, 'mg');
+            }
+        }
+
+        // Caspofungin-Sperre: Wenn steril aktiv, nie anzeigen.
+        if (!state.steril && state.eos && ssw_dec < 28.0) {
+            html += renderMedCard('Caspofungin', (weight * 25).toFixed(1), 24, 'mg', 'Loading Dose 25mg/kg, dann 25mg/kg 1x tgl.');
         }
 
         // Ureaplasma-Feature -> Clarithromycin
         if (state.ureaplasma) {
-            const extraNote = (ssw_dec > 32.0) ? ' PCR auf Ureaplasmen nur im Sonderfall durchführen.' : '';
+            const extraNote = (ssw_dec > 32.0) ? ' PCR nur im Sonderfall.' : '';
             html += `<div class="alert alert-warning"><b>Spezialmedikation:</b> Clarithromycin (Oberarzt-Indikation).${extraNote}</div>`;
         }
 
