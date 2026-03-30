@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NeoSOP Assistant</title>
+    <style>
+        /* Modernes, klinisches Design */
+        :root { --primary: #0056b3; --secondary: #6c757d; --danger: #dc3545; --success: #28a745; --warning: #ffc107; --bg: #f8f9fa; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #333; }
+        .container { max-width: 500px; margin: 0 auto; }
+        .section { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .disclaimer { background: #fff3f3; color: #7a0000; border: 1px solid #ffdddd; border-radius: 12px; padding: 12px 14px; margin: 0 auto 12px auto; max-width: 500px; white-space: pre-line; font-size: 0.85rem; line-height: 1.35; }
+        h2 { font-size: 0.9rem; color: var(--secondary); text-transform: uppercase; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        label { display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 5px; }
+        input, select { width: 100%; border: 1px solid #ddd; padding: 10px; border-radius: 8px; font-size: 1rem; box-sizing: border-box; margin-bottom: 10px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        /* Situations-Buttons */
+        .chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+        .chip { padding: 8px 12px; border: 1px solid #ddd; border-radius: 20px; font-size: 0.8rem; cursor: pointer; background: white; transition: 0.2s; }
+        .chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+        
+        /* Ergebniskarten */
+        .med-card { border-left: 5px solid var(--primary); padding: 12px; margin-bottom: 10px; background: #fff; position: relative; }
+        .med-name { font-weight: bold; font-size: 1.1rem; }
+        .med-dose { color: var(--primary); font-weight: 800; font-size: 1.2rem; float: right; }
+        .med-note { font-size: 0.75rem; color: #666; margin-top: 5px; }
+        .alert { padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-top: 10px; line-height: 1.4; }
+        .alert-info { background: #e7f3ff; color: #004085; border: 1px solid #b8daff; }
+        .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    </style>
+</head>
+<body>
+
+<div class="disclaimer">
+WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Bei fehlender Infektionsanamnese keine primäre antibiotische Therapie im Kreißsaal. Immer BB, CRP und IL-6 bestimmen.
+</div>
+
+<div class="container">
+    <header style="text-align: center; margin-bottom: 20px;">
+        <h1 style="margin:0; color: var(--primary); font-size: 1.6rem;">Neo-Sepsis SOP</h1>
+        <span style="font-size: 0.7rem; color: #999;">Stand 05/2021 | Köln</span>
+    </header>
+
+    <!-- Zone 1: Patientendaten -->
+    <div class="section">
+        <h2>1. Patientendaten</h2>
+        <label>Gewicht (g)</label>
+        <input type="number" id="weight" value="1500" oninput="ui_update()">
+        <div class="grid">
+            <div>
+                <label>SSW</label>
+                <input type="number" id="ssw_w" value="28" oninput="ui_update()">
+            </div>
+            <div>
+                <label>Tage</label>
+                <input type="number" id="ssw_d" value="0" oninput="ui_update()">
+            </div>
+        </div>
+        <label>Lebensalter (Tage)</label>
+        <input type="number" id="pna" value="1" oninput="ui_update()">
+    </div>
+
+    <!-- Zone 3: Output -->
+    <div id="output"></div>
+    
+    <!-- Zone 2: Situation -->
+    <div class="section">
+        <h2>2. Indikation & Situation</h2>
+        <div class="chip-group">
+            <div class="chip" id="chip_eos" onclick="toggleChip('eos')">EOS Primärtherapie</div>
+            <div class="chip" id="chip_vanco" onclick="toggleChip('vanco')">Verdacht KNS / Katheter</div>
+            <div class="chip" id="chip_meningitis" onclick="toggleChip('meningitis')">V.a. Meningitis</div>
+            <div class="chip" id="chip_steril" onclick="toggleChip('steril')">Blutkultur steril</div>
+            <div class="chip" id="chip_targeted" onclick="toggleChip('targeted')">Gezielte Therapie</div>
+            <div class="chip" id="chip_ureaplasma" onclick="toggleChip('ureaplasma')">V.a. Ureaplasmen / PCR positiv</div>
+            <div class="chip" id="chip_nvk_esk" onclick="toggleChip('nvk_esk')">NVK / ESK einliegend</div>
+        </div>
+    </div>
+    
+    <!-- Zone 4: Infobox Prävention -->
+    <div id="infobox" class="section" style="background: #fffdf0;"></div>
+
+    <footer style="font-size: 0.6rem; color: #aaa; text-align: center; padding: 20px;">
+        NUR FÜR ÄRZTLICHES PERSONAL. KEINE GEWÄHR FÜR RICHTIGKEIT.
+    </footer>
+</div>
+
+<script>
+    // Zustand der App
+    let state = { eos: true, vanco: false, meningitis: false, steril: false, targeted: false, ureaplasma: false, nvk_esk: false };
+
+    function toggleChip(id) {
+        state[id] = !state[id];
+        document.getElementById('chip_' + id).classList.toggle('active', state[id]);
+        ui_update();
+    }
+
+    function ui_update() {
+        // Hier binden wir deine logic.js ein (SOP_LOGIC Objekt)
+        const weight = parseFloat(document.getElementById('weight').value) / 1000;
+        const ssw_w = parseInt(document.getElementById('ssw_w').value);
+        const ssw_d = parseInt(document.getElementById('ssw_d').value);
+        const pna = parseInt(document.getElementById('pna').value);
+        
+        const pma = SOP_LOGIC.calculatePMA(ssw_w, ssw_d, pna);
+        const ssw_dec = ssw_w + (ssw_d / 7);
+        const therapyDays = ssw_dec < 28.0 ? 5 : 3;
+
+        let html = `<div class="pma-badge" style="text-align:center; font-weight:bold; margin-bottom:10px; font-size:0.9rem;">
+                    PMA: ${pma.weeks}+${pma.days} SSW</div>`;
+        const therapyNote = `<div class="alert alert-info" style="margin-bottom:10px;"><b>Therapiedauer:</b> ${therapyDays} Tage (Nur bei CRP&lt;10 mg/l und stabilem Zustand beenden).</div>`;
+        html += therapyNote;
+
+        // Standard-Medikamente: Ampicillin bleibt immer sichtbar.
+        // Exklusiver Medikamenten-Swap: bei gezielter Therapie oder Verdacht KNS/Katheter wird Tobramycin durch Vancomycin ersetzt.
+        const ampi = SOP_LOGIC.getAmpiCefo(pma, pna, weight, state.meningitis);
+        html += renderMedCard('Ampicillin', ampi.dose, ampi.interval, 'mg');
+        html += renderMedCard('Cefotaxim', ampi.dose, ampi.interval, 'mg');
+        const swapToVanco = state.targeted || state.vanco;
+        if (swapToVanco) {
+            const vanco = SOP_LOGIC.getVancomycin(pma, pna, weight, state.meningitis);
+            html += renderMedCard('Vancomycin', vanco.dose, vanco.interval, 'mg', `Talspiegel-Ziel: ${state.meningitis ? '15-20' : '5-10'} mg/l`);
+        } else {
+            const tobra = SOP_LOGIC.getTobramycin(pma, pna, weight);
+            html += renderMedCard('Tobramycin', tobra.dose, tobra.interval, 'mg', 'Talspiegel-Ziel: < 2 mg/l (vor 3. Gabe)');
+        }
+
+        // Optional: Caspofungin/Stop-Hinweis (Standard-Medikamente bleiben sichtbar)
+        if (state.eos && ssw_dec < 28.0) {
+            if (!state.steril) {
+                html += renderMedCard('Caspofungin', (weight * 25).toFixed(1), 24, 'mg', 'Loading Dose 25mg/kg, dann 25mg/kg 1x tgl.');
+            } else {
+                html += `<div class="alert alert-success"><b>Blutkultur steril:</b> erwägen, weitere Therapie zu beenden.</div>`;
+            }
+        }
+
+        // Ureaplasma-Feature -> Clarithromycin
+        if (state.ureaplasma) {
+            const extraNote = (ssw_dec > 32.0) ? ' PCR auf Ureaplasmen nur im Sonderfall durchführen.' : '';
+            html += `<div class="alert alert-warning"><b>Spezialmedikation:</b> Clarithromycin (Oberarzt-Indikation).${extraNote}</div>`;
+        }
+
+        // Diagnostik-Erinnerung
+        if (state.targeted) {
+            html += `<div class="alert alert-warning" style="margin-top:10px;"><b>Diagnostik-Erinnerung:</b> LP erwägen, bei gramnegativer Sepsis obligat!</div>`;
+        }
+
+        document.getElementById('output').innerHTML = html;
+
+        // 3. Infobox Prävention
+        const info = SOP_LOGIC.getInfobox(ssw_dec, weight, pna, state.nvk_esk);
+        document.getElementById('infobox').innerHTML = `
+            <h2>Prävention Katheter-Infektion</h2>
+            <div class="med-note"><b>Desinfektion:</b> ${info.desinfektion}</div>
+            <div class="med-note"><b>Fluconazol:</b> ${info.fluconazol}</div>
+            ${ssw_dec < 28.0 ? `<div class="med-note"><b>Antimykotika:</b> ${info.ampho}</div>` : ``}
+        `;
+
+        // Fluconazol-Prophylaxe prominent anzeigen (nur bei NVK/ESK einliegend + Kriterien)
+        if (state.nvk_esk && (weight < 1.0 || ssw_dec < 28.0)) {
+            document.getElementById('output').innerHTML += `
+                <div class="alert alert-warning" style="margin-top:10px; font-weight:700;">
+                    <b>Fluconazol-Prophylaxe</b>: Kriterien erfüllt (NVK/ESK einliegend + Gewicht &/oder SSW).
+                </div>
+            `;
+        }
+    }
+
+    function renderMedCard(name, dose, interval, unit, note = "") {
+        return `
+            <div class="med-card">
+                <span class="med-dose">${dose} ${unit}</span>
+                <div class="med-name">${name}</div>
+                <div class="med-int">Alle ${interval} Stunden</div>
+                ${note ? `<div class="med-note">${note}</div>` : ''}
+            </div>
+        `;
+    }
+
+</script>
+
+<script>
+/**
+ * Neonatologische SOP Logik-Engine (Stand 05/2021)
+ *
+ * Ergänzt mit Hinweisen für Kombinationslogik in ui_update():
+ *
+ * if (state.eos || state.vanco) {
+ *   // Ampicillin bleibt immer die Basis (außer bei explizitem Absetzen)
+ *   const ampi = SOP_LOGIC.getAmpiCefo(pma, pna, weight, state.meningitis);
+ *   html += renderMedCard('Ampicillin', ampi.dose, ampi.interval, 'mg');
+ *
+ *   if (state.vanco) {
+ *     // SWAP: Vancomycin statt Tobramycin bei KNS/gezielter Therapie
+ *     const vanco = SOP_LOGIC.getVancomycin(pma, pna, weight, state.meningitis);
+ *     html += renderMedCard('Vancomycin', vanco.dose, vanco.interval, 'mg',
+ *         `Ziel-Talspiegel: ${state.meningitis ? '15-20' : '5-10'} mg/l`); // [cite: 1]
+ *   } else {
+ *     // Standard EOS: Tobramycin anzeigen
+ *     const tobra = SOP_LOGIC.getTobramycin(pma, pna, weight);
+ *     html += renderMedCard('Tobramycin', tobra.dose, tobra.interval, 'mg',
+ *         'Ziel-Talspiegel: < 2 mg/l (vor 3. Gabe)'); // [cite: 1]
+ *   }
+ * }
+ */
+const SOP_LOGIC = {
+    // Hilfsfunktion zur Berechnung des dezimalen PMA
+    calculatePMA: function(ssw_w, ssw_d, pna_d) {
+        const totalDays = (ssw_w * 7) + ssw_d + pna_d;
+        return {
+            weeks: Math.floor(totalDays / 7),
+            days: totalDays % 7,
+            decimal: totalDays / 7
+        };
+    },
+
+    // Dosierung Ampicillin & Cefotaxim (50 mg/kg ED)
+    getAmpiCefo: function(pma, pna, weight, isMeningitis) {
+        // Bei Meningitis: 200 mg/kg/Tag, verteilt auf 3 ED => 66.6 mg/kg pro ED, Intervall 8h
+        if (isMeningitis) {
+            return {
+                dose: Math.round(weight * 66.6),
+                interval: 8,
+                unit: "mg"
+            };
+        }
+
+        const dosePerKg = 50;
+        let interval = 12;
+
+        if (pma.decimal <= 28.85) { // <= 28+6 SSW
+            interval = (pna <= 28) ? 12 : 8;
+        } else if (pma.decimal <= 35.85) { // 29+0 - 35+6 SSW
+            interval = (pna <= 14) ? 12 : 8;
+        } else if (pma.decimal <= 43.85) { // 36+0 - 43+6 SSW
+            interval = (pna <= 7) ? 12 : 8;
+        } else { // >= 44+0 SSW
+            interval = 6;
+        }
+
+        return {
+            dose: Math.round(weight * dosePerKg),
+            interval: interval,
+            unit: "mg"
+        };
+    },
+
+    // Dosierung Tobramycin (4-5 mg/kg ED)
+    getTobramycin: function(pma, pna, weight) {
+        let dosePerKg = 4;
+        let interval = 24;
+
+        if (pma.decimal <= 28.85) { // <= 28+6 SSW
+            dosePerKg = (pna <= 7) ? 5 : 4;
+            interval = (pna <= 7) ? 48 : (pna <= 28 ? 36 : 24);
+        } else if (pma.decimal <= 33.85) { // 29+0 - 33+6 SSW
+            dosePerKg = (pna <= 7) ? 4.5 : 4;
+            interval = (pna <= 7) ? 36 : 24;
+        } else { // >= 34+0 SSW
+            dosePerKg = 4;
+            interval = 24;
+        }
+
+        return {
+            dose: (weight * dosePerKg).toFixed(1),
+            interval: interval,
+            unit: "mg"
+        };
+    },
+
+    // Dosierung Vancomycin (10-15 mg/kg ED)
+    getVancomycin: function(pma, pna, weight, isMeningitis) {
+        const dosePerKg = isMeningitis ? 15 : 10;
+        let interval = 12;
+
+        if (pma.decimal <= 28.85) {
+            interval = (pna <= 14) ? 18 : 12;
+        } else if (pma.decimal <= 35.85) {
+            interval = (pna <= 14) ? 12 : 8;
+        } else if (pma.decimal <= 43.85) {
+            interval = (pna <= 7) ? 12 : 8;
+        } else {
+            interval = 6;
+        }
+
+        return {
+            dose: Math.round(weight * dosePerKg),
+            interval: interval,
+            unit: "mg"
+        };
+    },
+
+    // Infobox & Prophylaxen
+    getInfobox: function(ssw_dec, weight, pna, hasNvkEsk = false) {
+        hasNvkEsk = !!hasNvkEsk;
+        let desinfektion = "Kodan (Spray)";
+        if (ssw_dec < 26.0) desinfektion = "Betaisadona 1:10 (9ml Aqua + 1ml Betaisadona). Kontrolle TSH/fT3/fT4 nach 7 Tagen!";
+        else if (ssw_dec < 32.0) desinfektion = "Octenidin 0,1%";
+
+        const fluconazol = hasNvkEsk
+            ? ((ssw_dec < 28.0 || weight < 1.0) ? "Fluconazol-Prophylaxe indiziert (Kriterien erfüllt)" : "Fluconazol-Prophylaxe nicht standardmäßig indiziert (Kriterien nicht erfüllt)")
+            : "Fluconazol-Prophylaxe nicht indiziert (NVK/ESK nicht einliegend)";
+        const ampho = (ssw_dec < 28.0) ? "Amphomoronal po 2x0,3ml bis 48h nach Ende Antibiotika" : "Nicht indiziert";
+        return { desinfektion, fluconazol, ampho };
+    }
+};
+</script>
+
+<script>
+    // Initialer Aufruf (erst nach SOP_LOGIC-Definition)
+    document.getElementById('chip_eos').classList.add('active');
+    ui_update();
+</script>
+
+</body>
+</html>
