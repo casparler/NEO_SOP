@@ -29,6 +29,14 @@
         .alert { padding: 10px; border-radius: 8px; font-size: 0.8rem; margin-top: 10px; line-height: 1.4; }
         .alert-info { background: #e7f3ff; color: #004085; border: 1px solid #b8daff; }
         .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+
+        /* Tooltip / Info-Icon (Fluconazol-Warnungen) */
+        .info-icon { display: inline-block; width: 16px; height: 16px; line-height: 16px; text-align: center; border-radius: 50%; background: var(--secondary); color: white; font-size: 0.7rem; cursor: pointer; margin-left: 6px; position: relative; }
+        .info-icon:hover .tooltip, .info-icon:focus .tooltip { display: block; }
+        .info-icon .tooltip { display: none; position: absolute; bottom: 22px; right: 0; width: 240px; background: #212529; color: white; padding: 8px 10px; border-radius: 6px; font-size: 0.72rem; line-height: 1.35; text-align: left; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .info-icon .tooltip::after { content: ""; position: absolute; bottom: -5px; right: 6px; width: 10px; height: 10px; background: #212529; transform: rotate(45deg); }
+        .med-card.flucona { border-left-color: var(--warning); }
     </style>
 </head>
 <body>
@@ -172,13 +180,38 @@ WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Be
             ${ssw_dec < 28.0 ? `<div class="med-note"><b>Antimykotika:</b> ${info.ampho}</div>` : ``}
         `;
 
-        // Fluconazol-Prophylaxe prominent anzeigen (nur bei NVK/ESK einliegend + Kriterien)
+        // Fluconazol-Prophylaxe: aktive Dosierungslogik (nur bei NVK/ESK + Kriterien)
         if (state.nvk_esk && (weight < 1.0 || ssw_dec < 28.0)) {
-            document.getElementById('output').innerHTML += `
-                <div class="alert alert-warning" style="margin-top:10px; font-weight:700;">
-                    <b>Fluconazol-Prophylaxe</b>: Kriterien erfüllt (NVK/ESK einliegend + Gewicht &/oder SSW).
-                </div>
-            `;
+            const flu = SOP_LOGIC.getFluconazol(ssw_dec, weight, pna);
+            const tooltip = `
+                <span class="info-icon" tabindex="0">i<span class="tooltip">
+                    <b>Warnhinweise Fluconazol:</b><br>
+                    • <b>Leberwerte</b> (AST/ALT/Bili) baseline + wöchentlich kontrollieren – Hepatotoxizität möglich.<br>
+                    • <b>QT-Verlängerung</b>: EKG bei kardialer Vorbelastung / QT-verlängernden Komedikationen.<br>
+                    • <b>Interaktionen</b>: starker CYP2C9/CYP3A4-Inhibitor → Spiegel↑ von Midazolam, Fentanyl, Phenytoin, Cyclosporin, Tacrolimus, Sildenafil, Methadon u. a.<br>
+                    • <b>Off-label</b> bei Neonaten – Indikation dokumentieren.
+                </span></span>`;
+
+            if (flu.dose !== null) {
+                document.getElementById('output').innerHTML += `
+                    <div class="med-card flucona" style="margin-top:10px;">
+                        <span class="med-dose">${flu.dose} ${flu.unit}</span>
+                        <div class="med-name">Fluconazol-Prophylaxe ${tooltip}</div>
+                        <div class="med-int">Alle ${flu.interval} Stunden (Single-Dose)</div>
+                        <div class="med-note"><b>Schema:</b> ${flu.regime}</div>
+                        <div class="med-note">${flu.note}</div>
+                    </div>
+                    <div class="alert alert-warning" style="font-weight:600;">
+                        <b>Monitoring:</b> Leberwerte (AST/ALT/Bili) baseline + wöchentlich · CYP-Interaktionen prüfen · Dauer = solange i.v.-Zugang.
+                    </div>
+                `;
+            } else {
+                document.getElementById('output').innerHTML += `
+                    <div class="alert alert-warning" style="margin-top:10px;">
+                        <b>Fluconazol-Prophylaxe</b>: Indikation erfüllt, aber PNA &gt; 28 d → Schema [OFFEN] in Quelle. Rücksprache OA.
+                    </div>
+                `;
+            }
         }
     }
 
@@ -303,6 +336,41 @@ const SOP_LOGIC = {
             dose: Math.round(weight * dosePerKg),
             interval: interval,
             unit: "mg"
+        };
+    },
+
+    // Dosierung Fluconazol-Prophylaxe (IV) – off-label
+    // Quelle (User-verifiziert, 06.05.2026):
+    //  - VLBW <37 SSW & <1000 g  : 6 mg/kg/Dosis alle 3 Tage (72 h)
+    //  - Neugeborene 0–14 d PNA  : 6 mg/kg alle 72 h (1 Dosis)
+    //  - Neugeborene 14–28 d PNA : 6 mg/kg alle 48 h (1 Dosis)
+    //  - Dauer: solange ein intravenöser Zugang vorhanden ist
+    getFluconazol: function(ssw_dec, weight, pna) {
+        const dosePerKg = 6;
+        const isVLBW = (ssw_dec < 37.0) && (weight < 1.0);
+
+        let interval;
+        let regime;
+        if (isVLBW) {
+            interval = 72;
+            regime = "VLBW (<37 SSW & <1000 g) – Standard q72h";
+        } else if (pna <= 14) {
+            interval = 72;
+            regime = "Neugeborenes 0–14 Tage PNA – q72h";
+        } else if (pna <= 28) {
+            interval = 48;
+            regime = "Neugeborenes 14–28 Tage PNA – q48h";
+        } else {
+            interval = null;
+            regime = "PNA >28 Tage – Schema [OFFEN, nicht in Quelle]";
+        }
+
+        return {
+            dose: interval ? (weight * dosePerKg).toFixed(1) : null,
+            interval: interval,
+            unit: "mg",
+            regime: regime,
+            note: "off-label · IV · solange i.v.-Zugang"
         };
     },
 
