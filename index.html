@@ -37,6 +37,13 @@
         .info-icon .tooltip { display: none; position: absolute; bottom: 22px; right: 0; width: 240px; background: #212529; color: white; padding: 8px 10px; border-radius: 6px; font-size: 0.72rem; line-height: 1.35; text-align: left; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .info-icon .tooltip::after { content: ""; position: absolute; bottom: -5px; right: 6px; width: 10px; height: 10px; background: #212529; transform: rotate(45deg); }
         .med-card.flucona { border-left-color: var(--warning); }
+
+        /* PMA-Badge mit Info-Tooltip */
+        .pma-badge { text-align: center; font-weight: bold; margin-bottom: 10px; font-size: 0.95rem; background: #eef5ff; color: var(--primary); padding: 8px 10px; border-radius: 8px; }
+        .pma-badge .info-icon { background: var(--primary); }
+        .pma-badge .info-icon .tooltip { width: 260px; left: 50%; right: auto; transform: translateX(-50%); }
+        .pma-badge .info-icon .tooltip::after { left: 50%; right: auto; transform: translateX(-50%) rotate(45deg); }
+        .field-hint { font-size: 0.7rem; color: #888; margin: -6px 0 8px 0; }
     </style>
 </head>
 <body>
@@ -48,7 +55,7 @@ WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Be
 <div class="container">
     <header style="text-align: center; margin-bottom: 20px;">
         <h1 style="margin:0; color: var(--primary); font-size: 1.6rem;">Neo-Sepsis SOP</h1>
-        <span style="font-size: 0.7rem; color: #999;">Stand 05/2021 | Köln</span>
+        <span style="font-size: 0.7rem; color: #999;">SOP-Stand 05/2021 · Dosen nach Neofax 2009</span>
     </header>
 
     <!-- Zone 1: Patientendaten -->
@@ -58,16 +65,18 @@ WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Be
         <input type="number" id="weight" value="1500" oninput="ui_update()">
         <div class="grid">
             <div>
-                <label>SSW</label>
+                <label>SSW bei Geburt</label>
                 <input type="number" id="ssw_w" value="28" oninput="ui_update()">
             </div>
             <div>
-                <label>Tage</label>
+                <label>Tage bei Geburt</label>
                 <input type="number" id="ssw_d" value="0" oninput="ui_update()">
             </div>
         </div>
-        <label>Lebensalter (Tage)</label>
+        <div class="field-hint">Gestationsalter bei Geburt (GA) eintragen – das aktuelle PMA wird unten automatisch berechnet.</div>
+        <label>Lebensalter / PNA (Tage)</label>
         <input type="number" id="pna" value="1" oninput="ui_update()">
+        <div class="field-hint">Postnatales Alter in Tagen seit Geburt.</div>
     </div>
 
     <!-- Zone 3: Output -->
@@ -90,8 +99,9 @@ WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Be
     <!-- Zone 4: Infobox Prävention -->
     <div id="infobox" class="section" style="background: #fffdf0;"></div>
 
-    <footer style="font-size: 0.6rem; color: #aaa; text-align: center; padding: 20px;">
-        NUR FÜR ÄRZTLICHES PERSONAL. KEINE GEWÄHR FÜR RICHTIGKEIT.
+    <footer style="font-size: 0.65rem; color: #888; text-align: center; padding: 20px; line-height: 1.5;">
+        <b>Dosierungs-Intervalle nach aktuellem PMA (= GA + PNA), Quelle: Neofax 2009.</b><br>
+        NUR FÜR ÄRZTLICHES PERSONAL · KEINE GEWÄHR FÜR RICHTIGKEIT
     </footer>
 </div>
 
@@ -116,8 +126,19 @@ WICHTIG: Indikation prüfen (Wehen, Blasensprung, Blutung, mütterl. Fieber). Be
         const ssw_dec = ssw_w + (ssw_d / 7);
         const therapyDays = ssw_dec < 28.0 ? 5 : 3;
 
-        let html = `<div class="pma-badge" style="text-align:center; font-weight:bold; margin-bottom:10px; font-size:0.9rem;">
-                    PMA: ${pma.weeks}+${pma.days} SSW</div>`;
+        const pmaTooltip = `
+            <span class="info-icon" tabindex="0">i<span class="tooltip">
+                <b>PMA = Postmenstruelles Alter</b><br>
+                = GA bei Geburt <b>+</b> aktuelles Lebensalter (PNA).<br><br>
+                Laut <b>Neofax 2009</b> ist das <u>aktuelle</u> PMA der
+                <b>primäre</b> Bestimmer des Dosierungs-Intervalls,
+                PNA ist der sekundäre Qualifier.<br><br>
+                <i>Beispiel:</i> 28+0 SSW, 21 d alt → PMA 31 SSW (Zeile 30–36) →
+                PNA 21 d (>14) → Cefotaxim alle 8 h.
+            </span></span>`;
+        let html = `<div class="pma-badge">
+                    Aktuelles PMA: ${pma.weeks}+${pma.days} SSW · PNA ${pna} d ${pmaTooltip}
+                    </div>`;
         const therapyNote = `<div class="alert alert-info" style="margin-bottom:10px;"><b>Therapiedauer:</b> ${therapyDays} Tage (Nur bei CRP&lt;10 mg/l und stabilem Zustand beenden).</div>`;
         html += therapyNote;
 

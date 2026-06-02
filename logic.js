@@ -1,5 +1,19 @@
 /**
- * Neonatologische SOP Logik-Engine (Stand 05/2021)
+ * Neonatologische SOP Logik-Engine (Stand 05/2021, Dosen nach Neofax 2009)
+ *
+ * --- PMA-Klarstellung (Mail Sarina, Mai 2026) -------------------------------
+ * Quelle der Antibiotika-Dosen ist das Neofax 2009. Dort gilt:
+ *   "Postmenstrual Age (PMA = Gestational Age + Neonatal Age) is the PRIMARY
+ *    determinant of dosing interval, with Postnatal Age as the secondary
+ *    qualifier."
+ *
+ * → Für die Intervall-Wahl zählt das AKTUELLE PMA, NICHT das GA bei Geburt.
+ *   Beispiel: 28+0 SSW, 21 d alt → PMA 31 SSW (Zeile 30–36) → PNA 21 d (>14)
+ *             → Cefotaxim alle 8 h.
+ *
+ * calculatePMA() summiert GA + PNA → alle get*-Funktionen müssen mit dem
+ * Rückgabewert (pma.decimal) als Primärkriterium arbeiten.
+ * ---------------------------------------------------------------------------
  *
  * Ergänzt mit Hinweisen für Kombinationslogik in ui_update():
  * 
